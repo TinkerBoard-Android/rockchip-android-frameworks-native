@@ -235,6 +235,11 @@ SurfaceFlinger::SurfaceFlinger()
     property_get("debug.sf.disable_hwc_vds", value, "0");
     mUseHwcVirtualDisplays = !atoi(value);
     ALOGI_IF(!mUseHwcVirtualDisplays, "Disabling HWC virtual displays");
+
+    if(access("/sys/devices/platform/ff150000.i2c/i2c-3/3-0045/tinker_mcu_bl", F_OK) != -1) {
+        ALOGI("Tinker LCD is exist. Use 720p framebuffer size");
+        property_set("persist.sys.framebuffer.main", "1280x720");
+    }
 }
 
 void SurfaceFlinger::onFirstRef()
