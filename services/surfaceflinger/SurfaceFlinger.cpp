@@ -191,6 +191,9 @@ SurfaceFlinger::SurfaceFlinger()
     if(access("/sys/devices/platform/ff150000.i2c/i2c-3/3-0045/tinker_mcu_bl", F_OK) != -1) {
         ALOGI("Tinker LCD is exist. Use 720p framebuffer size");
         property_set("persist.sys.framebuffer.main", "1280x720");
+    } else {
+        ALOGI("Tinker LCD is not connected. Use 1080p framebuffer size");
+        property_set("persist.sys.framebuffer.main", "1920x1080");
     }
 }
 
