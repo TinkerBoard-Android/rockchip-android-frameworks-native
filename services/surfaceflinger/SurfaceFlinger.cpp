@@ -344,6 +344,9 @@ SurfaceFlinger::SurfaceFlinger() : SurfaceFlinger(SkipInitialization) {
 	if(access("/sys/bus/i2c/devices/i2c-4/4-0045/tinker_mcu_bl", F_OK) != -1) {
 		ALOGI("Tinker LCD is exist. Use 160 density");
 		property_set("qemu.sf.lcd_density", "160");
+	} else if(access("/sys/bus/i2c/devices/i2c-4/4-0036/tinker_mcu_ili9881c_bl", F_OK) != -1) {
+		ALOGI("Tinker ili9881c LCD is exist. Use 209(200) density");
+		property_set("qemu.sf.lcd_density", "200");
 	}
 
     ALOGI_IF(mDebugRegion, "showupdates enabled");
