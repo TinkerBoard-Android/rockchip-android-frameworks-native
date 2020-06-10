@@ -191,6 +191,10 @@ SurfaceFlinger::SurfaceFlinger()
     if(access("/sys/devices/platform/ff150000.i2c/i2c-3/3-0045/tinker_mcu_bl", F_OK) != -1) {
         ALOGI("Tinker LCD is exist. Use 720p framebuffer size");
         property_set("persist.sys.framebuffer.main", "1280x720");
+    } else if(access("/sys/devices/platform/ff150000.i2c/i2c-3/3-0036/tinker_mcu_ili9881c_bl", F_OK) != -1) {
+        ALOGI("Tinker ili9881c LCD is exist. Use 209(200) density");
+	property_set("persist.sys.framebuffer.main", "720x1280");
+	property_set("qemu.sf.lcd_density", "200");
     } else {
         ALOGI("Tinker LCD is not connected. Use 1080p framebuffer size");
         property_set("persist.sys.framebuffer.main", "1920x1080");
