@@ -196,8 +196,8 @@ SurfaceFlinger::SurfaceFlinger()
 	property_set("persist.sys.framebuffer.main", "720x1280");
 	property_set("qemu.sf.lcd_density", "200");
     } else {
-        ALOGI("Tinker LCD is not connected. Use 1080p framebuffer size");
-        //property_set("persist.sys.framebuffer.main", "1920x1080");
+        ALOGI("Tinker LCD is not connected. Clean framebuffer size");
+        property_set("persist.sys.framebuffer.main", " ");
     }
 }
 
