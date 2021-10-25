@@ -40,6 +40,8 @@
 #include "EventLog/EventLog.h"
 #include "SurfaceFlinger.h"
 
+#include <cutils/properties.h>
+
 using android::base::StringAppendF;
 using std::max;
 using std::min;
@@ -643,6 +645,24 @@ status_t DispSync::addEventListener(const char* name, nsecs_t phase, Callback* c
     return mThread->addEventListener(name, phase, callback, lastCallbackTime);
 }
 
+void DispSync::setRefreshSkipCount(int count) {
+    Mutex::Autolock lock(mMutex);
+    ALOGD("setRefreshSkipCount(%d)", count);
+    mRefreshSkipCount = count;
+    updateModelLocked();
+}
+
+void DispSync::updateRefreshSkipCountByProperty() {
+    Mutex::Autolock lock(mMutex);
+    char value[PROPERTY_VALUE_MAX];
+    property_get("persist.sys.refresh_skip_count", value, "0");
+    if(mRefreshSkipCount == atoi(value))
+        return;
+    mRefreshSkipCount = atoi(value);
+    ALOGD("setRefreshSkipCount(%d)", mRefreshSkipCount);
+    updateModelLocked();
+}
+
 status_t DispSync::removeEventListener(Callback* callback, nsecs_t* outLastCallbackTime) {
     Mutex::Autolock lock(mMutex);
     return mThread->removeEventListener(callback, outLastCallbackTime);
@@ -724,6 +744,9 @@ void DispSync::updateModelLocked() {
             mPhase += mPeriod;
             ALOGV("[%s] Adjusting mPhase -> %" PRId64, mName, ns2us(mPhase));
         }
+
+        // Artificially inflate the period if requested.
+        mPeriod += mPeriod * mRefreshSkipCount;
 
         mThread->updateModel(mPeriod, mPhase, mReferenceTime);
         mModelUpdated = true;

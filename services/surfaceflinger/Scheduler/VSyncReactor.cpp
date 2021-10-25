@@ -271,6 +271,10 @@ void VSyncReactor::beginResync() {
 
 void VSyncReactor::endResync() {}
 
+void VSyncReactor::setRefreshSkipCount(int count){ count = 0;};
+void VSyncReactor::updateRefreshSkipCountByProperty(){};
+
+
 bool VSyncReactor::periodConfirmed(nsecs_t vsync_timestamp, std::optional<nsecs_t> HwcVsyncPeriod) {
     if (!mPeriodConfirmationInProgress) {
         return false;

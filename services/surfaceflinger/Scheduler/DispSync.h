@@ -56,6 +56,8 @@ public:
     virtual nsecs_t getPeriod() = 0;
     virtual status_t addEventListener(const char* name, nsecs_t phase, Callback* callback,
                                       nsecs_t lastCallbackTime) = 0;
+    virtual void setRefreshSkipCount(int count) = 0;
+    virtual void updateRefreshSkipCountByProperty() = 0;
     virtual status_t removeEventListener(Callback* callback, nsecs_t* outLastCallback) = 0;
     virtual status_t changePhaseOffset(Callback* callback, nsecs_t phase) = 0;
     virtual nsecs_t computeNextRefresh(int periodOffset, nsecs_t now) const = 0;
@@ -149,6 +151,14 @@ public:
     // reregistered in rapid succession.
     status_t addEventListener(const char* name, nsecs_t phase, Callback* callback,
                               nsecs_t lastCallbackTime) override;
+
+    // setRefreshSkipCount specifies an additional number of refresh
+    // cycles to skip.  For example, on a 60Hz display, a skip count of 1
+    // will result in events happening at 30Hz.  Default is zero.  The idea
+    // is to sacrifice smoothness for battery life.
+    void setRefreshSkipCount(int count);
+    void updateRefreshSkipCountByProperty();
+
 
     // removeEventListener removes an already-registered event callback.  Once
     // this method returns that callback will no longer be called by the
@@ -245,6 +255,8 @@ private:
     // to validate the currently computed model.
     std::shared_ptr<FenceTime> mPresentFences[NUM_PRESENT_SAMPLES]{FenceTime::NO_FENCE};
     size_t mPresentSampleOffset;
+
+    int mRefreshSkipCount;
 
     // mThread is the thread from which all the callbacks are called.
     sp<DispSyncThread> mThread;

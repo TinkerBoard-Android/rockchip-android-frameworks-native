@@ -57,6 +57,9 @@ public:
 
     status_t addEventListener(const char* name, nsecs_t phase, DispSync::Callback* callback,
                               nsecs_t lastCallbackTime) final;
+
+    void setRefreshSkipCount(int count) final;
+    void updateRefreshSkipCountByProperty() final;
     status_t removeEventListener(DispSync::Callback* callback, nsecs_t* outLastCallback) final;
     status_t changePhaseOffset(DispSync::Callback* callback, nsecs_t phase) final;
 

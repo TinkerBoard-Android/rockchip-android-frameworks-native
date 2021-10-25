@@ -341,7 +341,7 @@ SurfaceFlinger::SurfaceFlinger(Factory& factory) : SurfaceFlinger(factory, SkipI
 
     hasWideColorDisplay = has_wide_color_display(false);
 
-    useColorManagement = use_color_management(false);
+    useColorManagement = use_color_management(true);
 
     mDefaultCompositionDataspace =
             static_cast<ui::Dataspace>(default_composition_dataspace(Dataspace::V0_SRGB));
@@ -2271,6 +2271,9 @@ void SurfaceFlinger::postComposition()
         layer->releasePendingBuffer(dequeueReadyTime);
     }
 
+    //RK support: to set DispSync mRefreshSkipCount by property.
+    mScheduler->getPrimaryDispSync().updateRefreshSkipCountByProperty();
+
     const auto* display = ON_MAIN_THREAD(getDefaultDisplayDeviceLocked()).get();
 
     getBE().mGlCompositionDoneTimeline.updateSignalTimes();
@@ -2329,6 +2332,7 @@ void SurfaceFlinger::postComposition()
             mScheduler->enableHardwareVsync();
         }
     }
+
 
     if (mAnimCompositionPending) {
         mAnimCompositionPending = false;
@@ -2763,6 +2767,11 @@ void SurfaceFlinger::processDisplayChanged(const wp<IBinder>& displayToken,
         if (currentState.layerStack != drawingState.layerStack) {
             display->setLayerStack(currentState.layerStack);
         }
+
+        if (currentState.width != drawingState.width ||
+            currentState.height != drawingState.height) {
+            display->setDisplaySize(currentState.width, currentState.height);
+        }
         if ((currentState.orientation != drawingState.orientation) ||
             (currentState.viewport != drawingState.viewport) ||
             (currentState.frame != drawingState.frame)) {
@@ -2771,7 +2780,6 @@ void SurfaceFlinger::processDisplayChanged(const wp<IBinder>& displayToken,
         }
         if (currentState.width != drawingState.width ||
             currentState.height != drawingState.height) {
-            display->setDisplaySize(currentState.width, currentState.height);
 
             if (display->isPrimary()) {
                 mScheduler->onPrimaryDisplayAreaChanged(currentState.width * currentState.height);
@@ -5883,36 +5891,7 @@ void SurfaceFlinger::renderScreenImplLocked(const RenderArea& renderArea,
     // buffer bounds.
     clientCompositionDisplay.physicalDisplay = Rect(reqWidth, reqHeight);
     clientCompositionDisplay.clip = sourceCrop;
-
-    if(renderArea.getDisplayDevice() == NULL) {
-        clientCompositionDisplay.orientation = rotation;
-    }else {
-        //we need consider internalDisplayOrientation when renderScreenImpl
-        //clientCompositionDisplay.orientation = rotation;
-        android::ui::Rotation r = android::ui::ROTATION_0;
-
-        switch (rotation) {
-            case ui::Transform::ROT_0:
-                r =  android::ui::ROTATION_0;
-                break;
-            case ui::Transform::ROT_90:
-                r =  android::ui::ROTATION_90;
-                break;
-            case ui::Transform::ROT_180:
-                r =  android::ui::ROTATION_180;
-                break;
-            case ui::Transform::ROT_270:
-                r =  android::ui::ROTATION_270;
-                break;
-            default:
-                r = android::ui::ROTATION_0;
-                break;
-        }
-
-        android::ui::Rotation new_orientation = (android::ui::Rotation)(((int)r + (int)internalDisplayOrientation) % 4);
-        clientCompositionDisplay.orientation = ui::Transform::toRotationFlags(new_orientation);
-    }
-
+    clientCompositionDisplay.orientation = rotation;
     clientCompositionDisplay.outputDataspace = renderArea.getReqDataSpace();
     clientCompositionDisplay.maxLuminance = DisplayDevice::sDefaultMaxLumiance;
 

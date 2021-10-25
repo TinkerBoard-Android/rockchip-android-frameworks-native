@@ -64,7 +64,7 @@ namespace android {
 
 std::unique_ptr<DispSync> createDispSync(bool supportKernelTimer) {
     // TODO (140302863) remove this and use the vsync_reactor system.
-    if (property_get_bool("debug.sf.vsync_reactor", true)) {
+    if (property_get_bool("debug.sf.vsync_reactor", false)) {
         // TODO (144707443) tune Predictor tunables.
         static constexpr int defaultRate = 60;
         static constexpr auto initialPeriod =

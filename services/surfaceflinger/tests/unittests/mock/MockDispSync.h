@@ -36,7 +36,6 @@ public:
     MOCK_METHOD1(setPeriod, void(nsecs_t));
     MOCK_METHOD0(getPeriod, nsecs_t());
     MOCK_METHOD0(getIntendedPeriod, nsecs_t());
-    MOCK_METHOD1(setRefreshSkipCount, void(int));
     MOCK_CONST_METHOD2(computeNextRefresh, nsecs_t(int, nsecs_t));
     MOCK_METHOD1(setIgnorePresentFences, void(bool));
     MOCK_METHOD1(expectedPresentTime, nsecs_t(nsecs_t));
@@ -45,6 +44,8 @@ public:
 
     status_t addEventListener(const char* name, nsecs_t phase, Callback* callback,
                               nsecs_t lastCallbackTime) override;
+    MOCK_METHOD1(setRefreshSkipCount, void(int));
+    MOCK_METHOD0(updateRefreshSkipCountByProperty, void());
     status_t removeEventListener(Callback* callback, nsecs_t* outLastCallback) override;
     status_t changePhaseOffset(Callback* callback, nsecs_t phase) override;
 
