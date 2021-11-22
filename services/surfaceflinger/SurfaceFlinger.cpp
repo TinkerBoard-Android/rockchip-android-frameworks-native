@@ -228,6 +228,17 @@ struct SCOPED_CAPABILITY UnnecessaryLock {
 constexpr float FALLBACK_DENSITY = ACONFIGURATION_DENSITY_TV;
 
 float getDensityFromProperty(const char* property, bool required) {
+
+	if ((access("/sys/bus/i2c/devices/i2c-8/8-0045/tinker_mcu_bl", F_OK) != -1) ||
+		(access("/sys/bus/i2c/devices/i2c-3/3-0045/tinker_mcu_bl", F_OK) != -1)) {
+		ALOGI("Tinker LCD is exist. Use 160 density");
+		property_set("qemu.sf.lcd_density", "160");
+	} else if ((access("/sys/bus/i2c/devices/i2c-8/8-0036/tinker_mcu_ili9881c_bl", F_OK) != -1) ||
+		(access("/sys/bus/i2c/devices/i2c-3/3-0036/tinker_mcu_ili9881c_bl", F_OK) != -1)) {
+		ALOGI("Tinker ili9881c LCD is exist. Use 209(200) density");
+		property_set("qemu.sf.lcd_density", "200");
+	}
+
     char value[PROPERTY_VALUE_MAX];
     const float density = property_get(property, value, nullptr) > 0 ? std::atof(value) : 0.f;
     if (!density && required) {
