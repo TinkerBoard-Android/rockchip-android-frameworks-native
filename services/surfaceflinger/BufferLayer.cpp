@@ -211,19 +211,14 @@ const sp<GraphicBuffer> & rgaCopyBit(sp<GraphicBuffer> src_buf, const Rect& rect
 }
 #endif
 
-#if RK_NV12_10_to_P010_BY_NEON
+#if (RK_NV12_10_to_P010_BY_NEON | RK_NV12_10_to_NV12_BY_NEON)
 
 #define HAL_PIXEL_FORMAT_YCrCb_NV12 0x15
 #define HAL_PIXEL_FORMAT_YCrCb_NV12_10 0x17
 //#define HAL_PIXEL_FORMAT_YCBCR_P010 0x36
 
-
 //sp<GraphicBuffer> dstBuffer;
 #define dstBufferMax  2
-#define dstBufferFormat  HAL_PIXEL_FORMAT_YCBCR_P010  //HAL_PIXEL_FORMAT_YCrCb_NV12_10
-#define dstBufferUsage  GraphicBuffer::USAGE_HW_TEXTURE
-
-
 sp<GraphicBuffer> dstBufferCache[dstBufferMax];
 
 #include <dlfcn.h>
@@ -233,8 +228,13 @@ typedef unsigned int u32;
 typedef signed char s8;
 typedef signed short s16;
 typedef signed int s32;
-#define RK_XXX_PATH         "/system/lib64/librockchipxxx.so"
+
 typedef void (*__rockchipxxx)(u8 *src, u8 *dst, int w, int h, int srcStride, int dstStride, int area);
+
+#if RK_NV12_10_to_P010_BY_NEON
+#define RK_XXX_PATH         "/system/lib64/librockchipxxx.so"
+#define dstBufferFormat  HAL_PIXEL_FORMAT_YCBCR_P010  //HAL_PIXEL_FORMAT_YCrCb_NV12_10
+#define dstBufferUsage  GraphicBuffer::USAGE_HW_TEXTURE
 
 void memcpy_to_p010(void * src_vaddr, void *dst_vaddr,int w,int h)
 {
@@ -263,7 +263,38 @@ void memcpy_to_p010(void * src_vaddr, void *dst_vaddr,int w,int h)
 
 }
 
+#endif
 
+#if RK_NV12_10_to_NV12_BY_NEON
+#define RK_XXX_PATH         "/system/lib/librockchipxxx.so"
+#define dstBufferFormat  HAL_PIXEL_FORMAT_YCrCb_NV12  //HAL_PIXEL_FORMAT_YCrCb_NV12_10
+#define dstBufferUsage  GraphicBuffer::USAGE_HW_TEXTURE
+
+void memcpy_to_NV12(void * src_vaddr, void *dst_vaddr,int w,int h)
+{
+    static void* dso = NULL;
+    static __rockchipxxx rockchipxxx = NULL;
+
+    if(dso == NULL)
+    dso = dlopen(RK_XXX_PATH, RTLD_NOW | RTLD_LOCAL);
+    if (dso == 0) {
+        ALOGE("nv12_10: can't not find %s ! error=%s \n",RK_XXX_PATH,dlerror());
+        return ;
+    }
+
+    if(rockchipxxx == NULL)
+        rockchipxxx = (__rockchipxxx)dlsym(dso, "_Z15rockchipxxx3288PhS_iiiii");
+    if(rockchipxxx == NULL)
+    {
+        ALOGE("nv12_10: can't not find target function in %s ! \n",RK_XXX_PATH);
+        dlclose(dso);
+        return ;
+    }
+
+    rockchipxxx((u8*)src_vaddr, (u8*)dst_vaddr, w, h, (w*1.25+64), w, 0);
+}
+
+#endif
 
 const sp<GraphicBuffer> & compatible_rk_nv12_10_format(const sp<GraphicBuffer>& srcBuffer,int dstWidth,int dstHeight)
 {
@@ -294,7 +325,13 @@ const sp<GraphicBuffer> & compatible_rk_nv12_10_format(const sp<GraphicBuffer>& 
     //memset(dst_vaddr,0xEB,3840*2160);
     //memset(((char *)dst_vaddr)+3840*2160,0x80,3840*2160/2);
 
+#if RK_NV12_10_to_P010_BY_NEON
     memcpy_to_p010(src_vaddr, dst_vaddr, dstWidth, dstHeight);
+#endif
+
+#if RK_NV12_10_to_NV12_BY_NEON
+    memcpy_to_NV12(src_vaddr, dst_vaddr, dstWidth, dstHeight);
+#endif
 
     srcBuffer->unlock();
     dstBufferCache[yuvIndex]->unlock();
@@ -364,13 +401,13 @@ std::optional<compositionengine::LayerFE::LayerSettings> BufferLayer::prepareCli
 
     const State& s(getDrawingState());
 
-#if (RK_NV12_10_to_P010_BY_NEON | RK_NV12_10_to_NV12_BY_RGA)
+#if (RK_NV12_10_to_P010_BY_NEON | RK_NV12_10_to_NV12_BY_RGA | RK_NV12_10_to_NV12_BY_NEON)
     if(mBufferInfo.mBuffer && (mBufferInfo.mBuffer)->getBuffer()->getPixelFormat() == HAL_PIXEL_FORMAT_YCrCb_NV12_10)
     {
         ALOGV("nv12_10: layer name:%s f:0x%x\n",layer.name.c_str(),(mBufferInfo.mBuffer)->getBuffer()->getPixelFormat());
         std::shared_ptr<renderengine::ExternalTexture> mmBuffer ;
 
-#if RK_NV12_10_to_P010_BY_NEON
+#if (RK_NV12_10_to_P010_BY_NEON | RK_NV12_10_to_NV12_BY_NEON)
         sp<GraphicBuffer> dstGraphicBuffer = compatible_rk_nv12_10_format((mBufferInfo.mBuffer)->getBuffer(),
                                                     mBufferInfo.mCrop.getWidth(),mBufferInfo.mCrop.getHeight());
 #endif
@@ -454,7 +491,7 @@ std::optional<compositionengine::LayerFE::LayerSettings> BufferLayer::prepareCli
     }
     const Rect win{getBounds()};
 
-#if (RK_NV12_10_to_P010_BY_NEON | RK_NV12_10_to_NV12_BY_RGA)
+#if (RK_NV12_10_to_P010_BY_NEON | RK_NV12_10_to_NV12_BY_RGA | RK_NV12_10_to_NV12_BY_NEON)
     float bufferWidth ;
     if(mBufferInfo.mBuffer && (mBufferInfo.mBuffer)->getBuffer()->getPixelFormat() == HAL_PIXEL_FORMAT_YCrCb_NV12_10)
         bufferWidth = mBufferInfo.mCrop.getWidth();
