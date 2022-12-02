@@ -56,6 +56,10 @@
 #include "LayerRejecter.h"
 #include "TimeStats/TimeStats.h"
 
+#if RK_NV12_10_to_NV12_BY_RGA
+#include <include/RockchipRga.h>
+#endif
+
 namespace android {
 
 using gui::WindowInfo;
@@ -142,19 +146,79 @@ static constexpr mat4 inverseOrientation(uint32_t transform) {
     return inverse(tr);
 }
 
-#if RK_NV12_10_to_P010_BY_NEON
+#if RK_NV12_10_to_NV12_BY_RGA
+#define dstBufferMax  2
+sp<GraphicBuffer> dstBufferRGA[dstBufferMax];
+#define yuvTexUsage GraphicBuffer::USAGE_HW_TEXTURE /*| HDRUSAGE*/
+#define yuvTexFormat HAL_PIXEL_FORMAT_YCrCb_NV12
+
+const sp<GraphicBuffer> & rgaCopyBit(sp<GraphicBuffer> src_buf, const Rect& rect, int dst_width, int dst_height)
+{
+    rga_info_t src, dst;
+    int src_l,src_t,src_r,src_b,src_h,src_stride,src_format;
+    int dst_l,dst_t,dst_r,dst_b,dst_h,dst_stride,dst_format;
+    RockchipRga& mRga = RockchipRga::get();
+    int rga_ret = 0;
+
+    static int yuvcnt;
+    int yuvIndex ;
+    yuvcnt ++;
+    yuvIndex = yuvcnt%dstBufferMax;
+    if((dstBufferRGA[yuvIndex] != NULL) &&
+    (dstBufferRGA[yuvIndex]->getWidth() != (uint32_t)dst_width ||
+     dstBufferRGA[yuvIndex]->getHeight() != (uint32_t)dst_height))
+    {
+        dstBufferRGA[yuvIndex] = NULL;
+    }
+    if(dstBufferRGA[yuvIndex] == NULL)
+    {
+        ALOGV("nv12_10: sf new GraphicBuffer w:%d h:%d f:0x%x u:0x%x\n",dst_width, dst_height, yuvTexFormat, yuvTexUsage);
+        dstBufferRGA[yuvIndex] = new GraphicBuffer(dst_width, dst_height, yuvTexFormat, yuvTexUsage);
+    }
+
+    memset(&src, 0, sizeof(rga_info_t));
+    memset(&dst, 0, sizeof(rga_info_t));
+    src.fd = -1;
+    dst.fd = -1;
+
+    src_stride = src_buf->getStride();
+    src_format = src_buf->getPixelFormat();
+    src_h = src_buf->getHeight();
+
+    dst_stride = dstBufferRGA[yuvIndex]->getStride();
+    dst_format = dstBufferRGA[yuvIndex]->getPixelFormat();
+    dst_h = dstBufferRGA[yuvIndex]->getHeight();
+
+    dst_l = src_l = rect.left;
+    dst_t = src_t = rect.top;
+    dst_r = src_r = rect.right;
+    dst_b = src_b = rect.bottom;
+    rga_set_rect(&src.rect, src_l, src_t, src_r - src_l, src_b - src_t, src_stride, src_h, src_format);
+    rga_set_rect(&dst.rect, dst_l, dst_t, dstBufferRGA[yuvIndex]->getWidth(), dstBufferRGA[yuvIndex]->getHeight(), dst_stride, dst_h, dst_format);
+
+    src.hnd = src_buf->handle;
+    dst.hnd = dstBufferRGA[yuvIndex]->handle;
+    rga_ret = mRga.RkRgaBlit(&src, &dst, NULL);
+    if(rga_ret) {
+        ALOGD_IF(1,"rgaCopyBit  : src[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x],dst[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x]",
+            src.rect.xoffset, src.rect.yoffset, src.rect.width, src.rect.height, src.rect.wstride, src.rect.hstride, src.rect.format,
+            dst.rect.xoffset, dst.rect.yoffset, dst.rect.width, dst.rect.height, dst.rect.wstride, dst.rect.hstride, dst.rect.format);
+        ALOGD_IF(1,"rgaCopyBit : src hnd=%p,dst hnd=%p, src_format=0x%x ==> dst_format=0x%x\n",
+            (void*)src_buf->handle, (void*)(dstBufferRGA[yuvIndex]->handle), src_format, dst_format);
+        ALOGE("nv12_10: rgaCopyBit failed\n");
+    }
+    return dstBufferRGA[yuvIndex];
+}
+#endif
+
+#if (RK_NV12_10_to_P010_BY_NEON | RK_NV12_10_to_NV12_BY_NEON)
 
 #define HAL_PIXEL_FORMAT_YCrCb_NV12 0x15
 #define HAL_PIXEL_FORMAT_YCrCb_NV12_10 0x17
 //#define HAL_PIXEL_FORMAT_YCBCR_P010 0x36
 
-
 //sp<GraphicBuffer> dstBuffer;
 #define dstBufferMax  2
-#define dstBufferFormat  HAL_PIXEL_FORMAT_YCBCR_P010  //HAL_PIXEL_FORMAT_YCrCb_NV12_10
-#define dstBufferUsage  GraphicBuffer::USAGE_HW_TEXTURE
-
-
 sp<GraphicBuffer> dstBufferCache[dstBufferMax];
 
 #include <dlfcn.h>
@@ -164,8 +228,13 @@ typedef unsigned int u32;
 typedef signed char s8;
 typedef signed short s16;
 typedef signed int s32;
-#define RK_XXX_PATH         "/system/lib64/librockchipxxx.so"
+
 typedef void (*__rockchipxxx)(u8 *src, u8 *dst, int w, int h, int srcStride, int dstStride, int area);
+
+#if RK_NV12_10_to_P010_BY_NEON
+#define RK_XXX_PATH         "/system/lib64/librockchipxxx.so"
+#define dstBufferFormat  HAL_PIXEL_FORMAT_YCBCR_P010  //HAL_PIXEL_FORMAT_YCrCb_NV12_10
+#define dstBufferUsage  GraphicBuffer::USAGE_HW_TEXTURE
 
 void memcpy_to_p010(void * src_vaddr, void *dst_vaddr,int w,int h)
 {
@@ -194,7 +263,38 @@ void memcpy_to_p010(void * src_vaddr, void *dst_vaddr,int w,int h)
 
 }
 
+#endif
 
+#if RK_NV12_10_to_NV12_BY_NEON
+#define RK_XXX_PATH         "/system/lib/librockchipxxx.so"
+#define dstBufferFormat  HAL_PIXEL_FORMAT_YCrCb_NV12  //HAL_PIXEL_FORMAT_YCrCb_NV12_10
+#define dstBufferUsage  GraphicBuffer::USAGE_HW_TEXTURE
+
+void memcpy_to_NV12(void * src_vaddr, void *dst_vaddr,int w,int h)
+{
+    static void* dso = NULL;
+    static __rockchipxxx rockchipxxx = NULL;
+
+    if(dso == NULL)
+    dso = dlopen(RK_XXX_PATH, RTLD_NOW | RTLD_LOCAL);
+    if (dso == 0) {
+        ALOGE("nv12_10: can't not find %s ! error=%s \n",RK_XXX_PATH,dlerror());
+        return ;
+    }
+
+    if(rockchipxxx == NULL)
+        rockchipxxx = (__rockchipxxx)dlsym(dso, "_Z15rockchipxxx3288PhS_iiiii");
+    if(rockchipxxx == NULL)
+    {
+        ALOGE("nv12_10: can't not find target function in %s ! \n",RK_XXX_PATH);
+        dlclose(dso);
+        return ;
+    }
+
+    rockchipxxx((u8*)src_vaddr, (u8*)dst_vaddr, w, h, (w*1.25+64), w, 0);
+}
+
+#endif
 
 const sp<GraphicBuffer> & compatible_rk_nv12_10_format(const sp<GraphicBuffer>& srcBuffer,int dstWidth,int dstHeight)
 {
@@ -225,7 +325,13 @@ const sp<GraphicBuffer> & compatible_rk_nv12_10_format(const sp<GraphicBuffer>& 
     //memset(dst_vaddr,0xEB,3840*2160);
     //memset(((char *)dst_vaddr)+3840*2160,0x80,3840*2160/2);
 
+#if RK_NV12_10_to_P010_BY_NEON
     memcpy_to_p010(src_vaddr, dst_vaddr, dstWidth, dstHeight);
+#endif
+
+#if RK_NV12_10_to_NV12_BY_NEON
+    memcpy_to_NV12(src_vaddr, dst_vaddr, dstWidth, dstHeight);
+#endif
 
     srcBuffer->unlock();
     dstBufferCache[yuvIndex]->unlock();
@@ -295,15 +401,21 @@ std::optional<compositionengine::LayerFE::LayerSettings> BufferLayer::prepareCli
 
     const State& s(getDrawingState());
 
-#if RK_NV12_10_to_P010_BY_NEON
+#if (RK_NV12_10_to_P010_BY_NEON | RK_NV12_10_to_NV12_BY_RGA | RK_NV12_10_to_NV12_BY_NEON)
     if(mBufferInfo.mBuffer && (mBufferInfo.mBuffer)->getBuffer()->getPixelFormat() == HAL_PIXEL_FORMAT_YCrCb_NV12_10)
     {
         ALOGV("nv12_10: layer name:%s f:0x%x\n",layer.name.c_str(),(mBufferInfo.mBuffer)->getBuffer()->getPixelFormat());
+        std::shared_ptr<renderengine::ExternalTexture> mmBuffer ;
 
+#if (RK_NV12_10_to_P010_BY_NEON | RK_NV12_10_to_NV12_BY_NEON)
         sp<GraphicBuffer> dstGraphicBuffer = compatible_rk_nv12_10_format((mBufferInfo.mBuffer)->getBuffer(),
                                                     mBufferInfo.mCrop.getWidth(),mBufferInfo.mCrop.getHeight());
+#endif
 
-        std::shared_ptr<renderengine::ExternalTexture> mmBuffer ;
+#if RK_NV12_10_to_NV12_BY_RGA
+        sp<GraphicBuffer> dstGraphicBuffer = rgaCopyBit(mBufferInfo.mBuffer->getBuffer(), mBufferInfo.mCrop,
+                                                    mBufferInfo.mCrop.getWidth(), mBufferInfo.mCrop.getHeight());
+#endif
         mmBuffer= std::make_shared<renderengine::ExternalTexture>(dstGraphicBuffer,
                             mFlinger->getCompositionEngine().getRenderEngine(),
                             renderengine::ExternalTexture::Usage::READABLE);
@@ -377,9 +489,9 @@ std::optional<compositionengine::LayerFE::LayerSettings> BufferLayer::prepareCli
         const mat4 texTransform(mat4(static_cast<const float*>(textureMatrix)) * tr);
         memcpy(textureMatrix, texTransform.asArray(), sizeof(textureMatrix));
     }
-
     const Rect win{getBounds()};
-#if RK_NV12_10_to_P010_BY_NEON
+
+#if (RK_NV12_10_to_P010_BY_NEON | RK_NV12_10_to_NV12_BY_RGA | RK_NV12_10_to_NV12_BY_NEON)
     float bufferWidth ;
     if(mBufferInfo.mBuffer && (mBufferInfo.mBuffer)->getBuffer()->getPixelFormat() == HAL_PIXEL_FORMAT_YCrCb_NV12_10)
         bufferWidth = mBufferInfo.mCrop.getWidth();

@@ -41,10 +41,27 @@ func globalDefaults(ctx android.BaseContext) ([]string) {
 
     if (strings.EqualFold(ctx.AConfig().Getenv("TARGET_BOARD_PLATFORM"),"rk3399")) {
         cflags = append(cflags,"-DRK_NV12_10_to_P010_BY_NEON=1")
+    }else if (strings.EqualFold(ctx.AConfig().Getenv("TARGET_BOARD_PLATFORM"),"rk356x")||strings.EqualFold(ctx.AConfig().Getenv("TARGET_BOARD_PLATFORM"),"rk3588")) {
+        //do nothing
+    }else if (strings.EqualFold(ctx.AConfig().Getenv("TARGET_BOARD_PLATFORM"),"rk3288")){
+        cflags = append(cflags,"-DRK_NV12_10_to_NV12_BY_NEON=1")
+    }else{
+        cflags = append(cflags,"-DRK_NV12_10_to_NV12_BY_RGA=1")
+    }
+
+    if (strings.EqualFold(ctx.AConfig().Getenv("TARGET_BOARD_PLATFORM_GPU"),"mali400")||
+        strings.EqualFold(ctx.AConfig().Getenv("TARGET_BOARD_PLATFORM_GPU"),"mali450")){
+        cflags = append(cflags,"-DRK_UTGARD_GPU_CLOSE_COLORMANAGEMENT=1")
     }
 
     if (strings.EqualFold(ctx.AConfig().Getenv("TARGET_RK_GRALLOC_VERSION"),"4") ) {
         cflags = append(cflags,"-DUSE_GRALLOC_4=1")
+    }
+
+    if (strings.EqualFold(ctx.AConfig().Getenv("TARGET_BOARD_PLATFORM_GPU"),"mali-G610") ) {
+        cflags = append(cflags,"-DMALI_PRODUCT_ID_G610=1")
+    } else if (strings.EqualFold(ctx.AConfig().Getenv("TARGET_BOARD_PLATFORM_GPU"),"mali450") ) {
+        cflags = append(cflags,"-DMALI_PRODUCT_ID_450=1")
     }
 
     //将需要区分的环境变量在此区域添加 //....
