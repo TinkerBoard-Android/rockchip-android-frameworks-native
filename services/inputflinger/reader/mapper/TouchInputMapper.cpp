@@ -421,6 +421,24 @@ TouchInputMapper::Parameters TouchInputMapper::computeParameters(
         }
     }
     //---------------
+    //--ASUS--
+    char buffer_orientation[PROPERTY_VALUE_MAX] = {0};
+    property_get("persist.sys.panel.flip", buffer_orientation, "");
+    if (strcmp(buffer_orientation, "")) {
+        int cmpRet = atoi(buffer_orientation);
+        ALOGI("persist.sys.panel.flip = %d", cmpRet);
+        if (cmpRet == 0) {
+            parameters.orientation = ui::ROTATION_0;
+        } else if (cmpRet == 90) {
+            parameters.orientation = ui::ROTATION_90;
+        } else if (cmpRet == 180) {
+            parameters.orientation = ui::ROTATION_180;
+        } else if (cmpRet == 270) {
+            parameters.orientation = ui::ROTATION_270;
+        }
+    }
+    //--------
+
     parameters.hasAssociatedDisplay = false;
     parameters.associatedDisplayIsExternal = false;
     if (parameters.orientationAware ||
